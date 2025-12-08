@@ -1,0 +1,43 @@
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, Enum as SQLEnum, JSON
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.sql import func
+
+Base = declarative_base()
+class User(Base):
+    """用户模型"""
+    __tablename__ = "users"
+    
+    id = Column(String, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    full_name = Column(String, nullable=True)
+    password = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Session(Base):
+    """会话模型"""
+    __tablename__ = "sessions"
+    
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    conversation_status = Column(String,default="")
+    current_action = Column(String, nullable=True)
+    waiting_for = Column(String, nullable=True)
+    context = Column(JSON, nullable=True)
+    message_count = Column(Integer, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+class Token(Base):
+    """令牌模型"""
+    __tablename__ = "tokens"
+    
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, index=True, nullable=False)
+    token = Column(String, unique=True, index=True, nullable=False)
+    expires = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
