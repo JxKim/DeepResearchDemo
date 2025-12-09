@@ -4,7 +4,7 @@
 通过命令行启动，命令如下：
 `cd ./frontend && npm run dev`
 ### 后端
-1. 安装依赖：`cd SmartAgentDemo && python -m venv .venv && pip install -r ./backend/requirements.txt`
+1. 安装依赖：`cd SmartAgentDemo/backend && uv sync`
 2. 复制&&修改配置文件：`cd SmartAgentDemo && cp backend/config.yaml.example config.yaml`
 3. 启动：`cd SmartAgentDemo/backend && python main.py`
 
@@ -16,7 +16,7 @@
 ## todo-list
 ### 大功能更新
 - [ ] langgraph短期记忆，使用postgresSQL实现，不使用sqllite
-- [ ] 使用docker启动前后端项目
+- [ ] 使用docker启动前后端项目，所有数据库依赖
 - [ ] 添加知识库，需要调整graph整体流程，添加RAG
 - [ ] 使用vlm model 进行图像识别 
 - [ ] 将项目通过docker compose打包部署
