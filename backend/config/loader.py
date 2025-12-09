@@ -8,8 +8,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from config.models import AppConfig
-
-
 class ConfigLoader:
     """配置加载器类"""
     
