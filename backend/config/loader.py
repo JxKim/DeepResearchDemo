@@ -11,7 +11,7 @@ from config.models import AppConfig
 class ConfigLoader:
     """配置加载器类"""
     
-    def __init__(self, config_path: str = str(Path(__file__).parent.parent / "config.yaml"), env_path: str = ".env"):
+    def __init__(self, config_path: str = str(Path(__file__).parent.parent / "config.yaml"), env_path: str = str(Path(__file__).parent.parent / ".env")):
         self.config_path = Path(config_path)
         self.env_path = Path(env_path)
         self._config: Optional[AppConfig] = None

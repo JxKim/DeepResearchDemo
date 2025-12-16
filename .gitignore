@@ -21,3 +21,7 @@ backend/tests/
 backend/services/agent/data/langgraph_checkpoint*
 
 .pytest_cache/
+
+# config_file
+backend/.env
+backend/db/volumes*
