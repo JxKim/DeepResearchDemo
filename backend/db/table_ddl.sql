@@ -118,3 +118,38 @@ alter table knowledge_chunks
 
 create index if not exists ix_knowledge_chunks_file_id
     on knowledge_chunks (file_id);
+
+
+-- 短时记忆：存储完整的对话历史
+create table if not exists conversation_history (
+    id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL,
+    user_id VARCHAR NOT NULL,
+    user_input TEXT NOT NULL,
+    agent_output TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+alter table conversation_history
+    owner to smartagent_user;
+
+create index if not exists ix_conversation_history_session_id ON conversation_history (session_id);
+
+-- 长时记忆：存储会话的归纳总结
+create table if not exists session_summaries (
+    id VARCHAR PRIMARY KEY,
+    session_id VARCHAR NOT NULL UNIQUE,
+    user_id VARCHAR NOT NULL,
+    summary TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+    FOREIGN KEY (session_id) REFERENCES sessions(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+alter table session_summaries
+    owner to smartagent_user;
+
+create index if not exists ix_session_summaries_session_id ON session_summaries (session_id);
