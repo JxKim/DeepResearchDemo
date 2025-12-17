@@ -97,9 +97,9 @@ security:
 tavily_api_key: "${TAVILY_API_KEY}"
 
 storage:
-  storage_type: "postgres"
-  scheme: "postgresql"
-  file_path: "./data"
+  storage_type: "fs"
+  scheme: "fs"
+  file_path: "./data" 
 
 milvus:
   uri: "${MILVUS_URI:http://localhost:19530}"

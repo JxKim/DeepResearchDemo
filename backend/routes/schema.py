@@ -243,7 +243,7 @@ class RecallTestRequest(BaseModel):
 class RecallResult(BaseModel):
     file_name: str
     content: str
-    score: float
+    score: float=None
 
 class RecallTestResponse(BaseResponse):
-    data: List[RecallResult]
+    data: List[RecallResult] | None 

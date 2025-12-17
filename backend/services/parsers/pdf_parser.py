@@ -2,8 +2,10 @@ from services.parsers.base import BaseParser
 from typing import List
 from langchain_community.document_loaders import UnstructuredPDFLoader
 from config.loader import get_config
-
+from config.loguru_config import get_logger
 config = get_config()
+logger = get_logger()
+
 
 
 class PDFParser(BaseParser):
@@ -17,9 +19,16 @@ class PDFParser(BaseParser):
         :param file_path: PDF文件路径
         :return: 解析后的文本内容
         """
-        elements = UnstructuredPDFLoader(file_path=file_path,
-        mode="elements",
-        strategy="hi_res",infer_table_structure=True,languages=["eng","chi_sim"]).load()
+        logger.info(f"开始解析PDF文件 {file_path}")
+        # todo 使用UnstructuredPDFLoader解析，现在速度太慢了，怎么优化？
+        elements = UnstructuredPDFLoader(
+            file_path=file_path,
+            mode="elements",
+            strategy="fast",
+            infer_table_structure=True,
+            languages=["eng","chi_sim"]
+            ).load()
+        logger.info(f"成功解析PDF文件 {elements[0]}")
         # elements = partition_pdf(file_path)
         return elements
 

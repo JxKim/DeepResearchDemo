@@ -1,7 +1,7 @@
 """
 配置数据模型 - 类型安全的配置管理
 """
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Dict, Optional, List, Any
 from enum import Enum
 
@@ -123,7 +123,7 @@ class LLMConfig(BaseModel):
     max_tokens: int = 2000
     timeout: int = 60
     
-    @validator('temperature')
+    @field_validator('temperature')
     def validate_temperature(cls, v):
         if not 0 <= v <= 2:
             raise ValueError('温度值必须在0到2之间')
