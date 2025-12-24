@@ -61,10 +61,11 @@ class MineruPDFLoader(BaseParser):
         return cls.__instance
 
     def __init__(self):
-        self.http_client = AsyncHTTPClient(base_url=config.mineru_config.base_url)
+        pass
+        # self.http_client = AsyncHTTPClient(base_url=config.mineru_config.base_url)
 
     
-    async def parse(self, file_path: str) -> List:
+    def parse(self, file_path: str,file_name:str) -> List:
         """
         解析PDF文件内容
         :param file_path: PDF文件路径
@@ -72,36 +73,51 @@ class MineruPDFLoader(BaseParser):
         """
         # 先使用Mineru解析PDF文件，将其解析成markdown文件，然后再使用MarkdownParser解析markdown文件内容
         logger.info("使用Mineru解析PDF文件")
-        
-        # 准备上传的文件
-        files = {"files": open(file_path, "rb")}
-        
-        # 准备表单数据
-        data = {
-            "output_dir": "./output",
-            "backend": "vlm-transformers",
-            "return_md": "true",
-        }
-        
+
         try:
-            # 发送 POST 请求到 Mineru 服务
-            response = await self.http_client.post(
-                config.mineru.parse_endpoint, 
-                files=files,
-                data=data
-            )
+            import requests
+            from pathlib import Path
+
+            mineru_cfg = getattr(config, "mineru", None)
+            if mineru_cfg is None:
+                raise Exception("Mineru配置缺失")
+
+            base_url = str(mineru_cfg.base_url).rstrip("/")
+            parse_endpoint = str(mineru_cfg.parse_endpoint)
+            parse_url = f"{base_url}{parse_endpoint}"
+
+            backend = "vlm-vllm-async-engine" if getattr(mineru_cfg, "use_vllm", False) else "pipeline"
+            logger.info(f"使用Mineru后端: {backend}")
+            request_data = {
+                "backend": backend,
+                "return_md": "true",
+                "start_page_id":0,
+                "end_page_id":5
+            }
+
+            upload_name = file_name or Path(file_path).name
+            with open(file_path, "rb") as f:
+                request_files = [("files", (upload_name, f, "application/pdf"))]
+                response = requests.post(
+                    url=parse_url,
+                    data=request_data,
+                    files=request_files,
+                )
+
+            
             
             # 检查响应状态
             if response.status_code != 200:
                 logger.error(f"Mineru解析失败: {response.text}")
-                raise Exception(f"Mineru解析失败: {response.status_code}")
+                raise Exception(f"Mineru解析失败: {response.text}")
 
             # 获取解析结果
             result = response.json()
-            
+            logger.info(result.keys())
             # 如果 Mineru 返回的是 markdown 内容字符串
-            if "markdown" in result:
-                md_content = result["markdown"]
+            if "results" in result:
+
+                md_content = result["results"][file_name]["md_content"]
                 md_content = MarkdownParser._clean_markdown(md_content)
                 # 这里可能需要将字符串保存为临时文件再给 MarkdownParser 解析，或者 MarkdownParser 支持直接解析字符串
                 # 假设 MarkdownParser 需要文件路径，我们先保存为临时文件
@@ -113,8 +129,10 @@ class MineruPDFLoader(BaseParser):
                     tmp_md_path = tmp_md.name
                     
                 try:
+                    logger.info(f"临时文件路径: {tmp_md_path}，开始启动Markdown解析")
                     markdown_parser = MarkdownParser()
                     documents = markdown_parser.parse(tmp_md_path)
+                    logger.info(f"Markdown解析完成，共解析出 {len(documents)} 个文档片段")
                     return documents
                 finally:
                     if os.path.exists(tmp_md_path):
@@ -156,6 +174,4 @@ class MineruPDFLoader(BaseParser):
         except Exception as e:
             logger.error(f"PDF解析过程出错: {e}")
             raise e
-
-
 

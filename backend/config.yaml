@@ -93,7 +93,7 @@ http_client:
 
 # 安全配置
 security:
-  access_token_expire_minutes: "${ACCESS_TOKEN_EXPIRE_MINUTES:30}"
+  access_token_expire_minutes: "${ACCESS_TOKEN_EXPIRE_MINUTES:300}"
   secret_key: "${SECRET_KEY}"
   algorithm: "${ALGORITHM:HS256}"
 
@@ -103,7 +103,7 @@ tavily_api_key: "${TAVILY_API_KEY}"
 storage:
   storage_type: "fs"
   scheme: "fs"
-  file_path: "./data" 
+  file_path: "${STORAGE_FILE_PATH}"
 
 milvus:
   uri: "${MILVUS_URI:http://localhost:19530}"
@@ -122,4 +122,4 @@ embedding:
 mineru:
   base_url: "${MINERU_BASE_URL:http://localhost:8000}"
   parse_endpoint: "/file_parse"
-  use_vllm: false
+  use_vllm: "${MINERU_USE_VLM}"

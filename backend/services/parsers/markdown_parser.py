@@ -4,7 +4,9 @@ Markdown解析器，对Markdown进行解析
 from langchain_core.documents import Document
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
+from services.parsers.base import BaseParser
+from typing import List
+import re
 class MarkdownParser(BaseParser):
     """
     Markdown文件解析器

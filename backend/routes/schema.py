@@ -212,34 +212,33 @@ class ParseStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
-class KnowledgeFileBase(BaseModel):
-    file_name: str
-    file_id: str
-    is_parsed: bool = False
-    chunk_num: int = 0
-    search_type: SearchType = SearchType.VECTOR
+class KnowledgeFile(BaseModel):
+    file_id:str
+    file_name:str
     parse_status: ParseStatus = ParseStatus.PENDING # 对应获取解析状态
+    chunk_num: int =0
+    user_id: Optional[str] = None
     category_id: Optional[str] = None
-    
-class KnowledgeFile(KnowledgeFileBase):
-    id: str
-    user_id: str
     created_at: datetime
     updated_at: datetime
-    size: int # 文件大小
 
 class KnowledgeFileListResponse(BaseResponse):
     data: List[KnowledgeFile]
 
-class ParseTaskResponse(BaseResponse):
-    data: Dict[str, str] # task_id
+class ParseProgress(BaseModel):
+    file_id: str
+    status: ParseStatus | None = None
+    chunk_num: int | None = None
+    updated_at: datetime | None = None
 
 class ParseProgressResponse(BaseResponse):
-    data: Dict[str, Any] # status, progress, etc.
+    data: Optional[ParseProgress] = None
 
 class RecallTestRequest(BaseModel):
     query: str = Field(..., min_length=1)
     limit: int = 5
+    search_strategy: Optional[str] = None
+    file_id: Optional[str] = None
 
 class RecallResult(BaseModel):
     file_name: str
@@ -249,17 +248,16 @@ class RecallResult(BaseModel):
 class RecallTestResponse(BaseResponse):
     data: List[RecallResult] | None 
 
-class KnowledgeCategoryBase(BaseModel):
+
+class KnowledgeCategoryCreate(BaseModel):
     name: str
-    description: str
+    description: Optional[str] = None
 
-class KnowledgeCategoryCreate(KnowledgeCategoryBase):
-    pass
-
-class KnowledgeCategory(KnowledgeCategoryBase):
-    id: str
-    created_at: datetime
-    updated_at: datetime
+class KnowledgeCategory(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    count: int = 0
 
 class KnowledgeCategoryListResponse(BaseResponse):
     data: List[KnowledgeCategory]

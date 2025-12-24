@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean, Enum as SQLEnum, JSON, Text
+from sqlalchemy import Column, String, Integer, BigInteger, DateTime, Boolean, Enum as SQLEnum, JSON, Text
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.sql import func
 
@@ -33,6 +33,9 @@ class KnowledgeFile(Base):
     chunk_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    category_id = Column(String, index=True, nullable=False)
+
+
 
 class Session(Base):
     """会话模型"""
@@ -67,7 +70,7 @@ class KnowledgeCategory(Base):
     """知识库分类模型"""
     __tablename__ = "knowledge_category"
     
-    id = Column(String, primary_key=True, index=True)
+    id = Column(BigInteger, primary_key=True, index=True, autoincrement=True)
     user_id = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -107,4 +110,3 @@ class SessionSummary(Base):
     summary = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
