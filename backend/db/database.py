@@ -69,7 +69,6 @@ async def db_shutdown():
 # 依赖项：获取数据库会话
 async def get_db() -> AsyncSession:
     # yield前的代码相当于 __enter__ / __aenter__
-    logger.info("Creating session...")
     session = SessionLocal()
 
     try:
@@ -86,7 +85,6 @@ async def get_db() -> AsyncSession:
         raise
     finally:
         # finally中的代码一定会执行
-        logger.info("Closing session...")
         await session.close()
 
 

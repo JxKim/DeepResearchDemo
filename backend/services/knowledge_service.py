@@ -26,7 +26,7 @@ from concurrent.futures import ThreadPoolExecutor
 from langchain_core.documents import Document
 from mineru_vl_utils import MinerUClient
 config = get_config()
-logger = get_logger()
+logger = get_logger(__name__)
 
 class SearchStrategy:
     """
@@ -296,6 +296,7 @@ class KnowledgeService:
         except Exception as e:
             # 记录错误日志
             logger.error(f"Error in parse task: {e}")
+            raise Exception(e)
 
     def _process_file_parsing_sync(self, user_id: str, file_id: str, SessionLocal):
         """
@@ -329,7 +330,9 @@ class KnowledgeService:
                 # 3. 根据文件类型选择解析器
                 parser = None
                 if mime_type == 'application/pdf':
+                    logger.info("开始解析pdf文件")
                     parser = MineruPDFLoader()
+                    clean_file_name= file_record.file_name.replace(".pdf","")
                 elif mime_type == 'text/csv' or mime_type == 'text/plain': # csv sometimes detected as text/plain
                      if file_record.file_name.endswith('.csv'):
                          parser = CSVParser()
@@ -344,7 +347,8 @@ class KnowledgeService:
                             tmp_path = tmp_file.name
                             
                         # 同步解析
-                        documents = parser.parse(tmp_path)
+                        
+                        documents = parser.parse(tmp_path,file_name=clean_file_name)
                             
                         logger.info("准备将数据写入Milvus")
                         self._ensure_collection_exists_sync()
@@ -391,7 +395,6 @@ class KnowledgeService:
                     db.commit()
 
     def _ensure_collection_exists_sync(self):
-        
         if not self.sync_milvus_client.has_collection(collection_name=self.milvus_collection_name):
             logger.info(f"Collection {self.milvus_collection_name} not found, initializing...")
             self._init_collection_sync()

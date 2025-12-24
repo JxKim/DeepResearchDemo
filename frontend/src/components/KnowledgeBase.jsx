@@ -175,7 +175,14 @@ const KnowledgeBase = () => {
       const options = fileLists.map(({ category, files: fs }) => ({
         value: category.id,
         label: category.name,
-        children: fs.map((f) => ({ value: f.file_id, label: f.file_name }))
+        children: fs.map((f) => {
+          const isParsed = f?.parse_status === ParseStatus.COMPLETED;
+          return {
+            value: f.file_id,
+            label: isParsed ? f.file_name : `${f.file_name} (未解析)`,
+            disabled: !isParsed,
+          };
+        })
       }));
       setFileOptions(options);
     } catch {
@@ -347,17 +354,26 @@ const KnowledgeBase = () => {
     });
   };
 
-  const handleTestSearch = async () => {
-    if (!testQuery.trim()) return;
+  const handleTestSearch = async (searchValue) => {
+    const query = (typeof searchValue === 'string' ? searchValue : testQuery).trim();
+    if (!query) return;
     if (selectedTestDoc.length < 2) {
       message.warning('请先选择测试文档');
       return;
     }
+
+    const selectedCategoryOption = fileOptions.find((c) => c.value === selectedTestDoc[0]);
+    const selectedFileOption = selectedCategoryOption?.children?.find((f) => f.value === selectedTestDoc[1]);
+    if (selectedFileOption?.disabled) {
+      message.warning('该文件尚未解析，无法测试召回');
+      return;
+    }
     
     setIsTesting(true);
+    setTestQuery(query);
     try {
       const fileId = selectedTestDoc[1]; // 选中的是第二级(文件ID)
-      const results = await KnowledgeApi.testRecall(testQuery, testStrategy, fileId, testLimit);
+      const results = await KnowledgeApi.testRecall(query, testStrategy, fileId, testLimit);
       setTestResults(results);
       if (results.length === 0) {
         message.info('未找到相关内容');
@@ -449,7 +465,7 @@ const KnowledgeBase = () => {
                 />
               </Form.Item>
               <div style={{ marginTop: 24 }}>
-                 {selectedTestDoc.length > 0 && (
+                 {selectedTestDoc.length > 1 && (
                    <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', padding: '12px', borderRadius: '6px' }}>
                      <Space>
                        <CheckCircleOutlined style={{ color: '#52c41a' }} />
@@ -513,7 +529,9 @@ const KnowledgeBase = () => {
                 allowClear
                 enterButton={<Button type="primary" icon={<SearchOutlined />}>测试召回</Button>}
                 size="large"
-                onSearch={handleTestSearch}
+                value={testQuery}
+                onChange={(e) => setTestQuery(e.target.value)}
+                onSearch={(value) => handleTestSearch(value)}
                 loading={isTesting}
               />
 

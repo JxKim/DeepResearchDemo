@@ -18,8 +18,9 @@ from routes.schema import (
     RecallResult
 )
 from db.database import get_db
-
+from config.loguru_config import get_logger
 router = APIRouter(prefix="/knowledge", tags=["知识库管理"])
+logger = get_logger(__name__)
 
 
 
@@ -61,6 +62,7 @@ async def parse_file(file_id: str, category_id:str,current_user=Depends(get_curr
     """
     长耗时任务，需要前端实时解析，当前解析到了哪一步。解析上传的文件
     """
+    logger.info(f"解析文件 {file_id} 开始")
     file_id = await knowledge_service.submit_parse_task(current_user.id, category_id,file_id,db=db)
     if not file_id:
         return BaseResponse(success=False, message="文件不存在或无权限")
