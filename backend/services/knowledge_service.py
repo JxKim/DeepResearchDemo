@@ -16,6 +16,7 @@ from config.loader import get_config
 from config.loguru_config import get_logger
 from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, delete, cast, String as SAString
 from db.db_models import KnowledgeFile, KnowledgeChunk, KnowledgeCategory
 import uuid
 import time
@@ -220,14 +221,14 @@ class KnowledgeService:
         await db.refresh(new_file)
         return new_file
     
-    async def delete_file(self, user_id: str, file_id: str,db: AsyncSession)->bool:
+    async def delete_file(self, user_id: str, category_id: str, file_id: str,db: AsyncSession)->bool:
         """
         删除文件
         :param user_id: 用户ID
         :param file_id: 文件ID
         :return: bool
         """
-        result = await db.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id, KnowledgeFile.user_id == user_id))
+        result = await db.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id, KnowledgeFile.category_id == category_id, KnowledgeFile.user_id == user_id))
         file_record = result.scalars().first()
         if not file_record:
                 return False
@@ -243,7 +244,6 @@ class KnowledgeService:
             collection_name=config.milvus.collection_name,
             filter=f"file_id == '{file_id}'"
         )
-        from sqlalchemy import delete
         await db.execute(delete(KnowledgeFile).where(KnowledgeFile.id == file_id, KnowledgeFile.user_id == user_id))
         await db.execute(delete(KnowledgeChunk).where(KnowledgeChunk.file_id == file_id))
         
@@ -251,7 +251,7 @@ class KnowledgeService:
         await db.commit()
         return True
     
-    async def submit_parse_task(self, user_id: str, file_id: str, db: AsyncSession):
+    async def submit_parse_task(self, user_id: str, category_id: str, file_id: str, db: AsyncSession):
         """
         提交解析任务
         :param user_id: 用户ID
@@ -259,7 +259,7 @@ class KnowledgeService:
         :return: task_id (str)
         """
         # 查询文件记录
-        result = await db.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id, KnowledgeFile.user_id == user_id))
+        result = await db.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id, KnowledgeFile.category_id == category_id, KnowledgeFile.user_id == user_id))
         file_record = result.scalars().first()
         
         if file_record:
@@ -473,19 +473,34 @@ class KnowledgeService:
         else:
             logger.error("Milvus Collection 初始化失败 (Sync)")
     
-    async def get_parse_status(self, file_id: str,db: AsyncSession):
+    async def get_parse_status(self, file_id: str, db: AsyncSession, user_id: str | None = None):
         """
         获取解析状态
         :param file_id: 文件ID
         :return: ParseProgressResponse data dict
         """
-        result = await db.execute(select(KnowledgeFile).where(KnowledgeFile.id == file_id))
+        where_clause = [KnowledgeFile.id == file_id]
+        if user_id:
+            where_clause.append(KnowledgeFile.user_id == user_id)
+        result = await db.execute(select(KnowledgeFile).where(*where_clause))
         file_record = result.scalars().first()
         if not file_record:
             return None
-        return {"status": file_record.parse_status,"file_name":file_record.file_name,"chunk_count":file_record.chunk_count,"file_id":file_record.id}
+        return {
+            "status": file_record.parse_status,
+            "file_name": file_record.file_name,
+            "chunk_count": file_record.chunk_count,
+            "file_id": file_record.id,
+            "updated_at": file_record.updated_at,
+        }
 
-    async def search_content(self, query: str | list[str], limit: int = 5,search_strategy:str = SearchStrategy.FULL_TEXT)->list[list[dict]]:
+    async def search_content(
+        self,
+        query: str | list[str],
+        limit: int = 5,
+        search_strategy: str | None = None,
+        file_id: str | None = None,
+    ) -> list[list[dict]]:
         """
         根据 query 召回文档，
         :param query: 查询语句
@@ -531,10 +546,11 @@ class KnowledgeService:
         request_2 = AnnSearchRequest(**search_param_2)
 
         
-        if search_strategy == SearchStrategy.FULL_TEXT:
-            reqs = [request_1]
-        elif search_strategy == SearchStrategy.VECTOR:
+        strategy = search_strategy or SearchStrategy.HYBRID
+        if strategy == SearchStrategy.FULL_TEXT:
             reqs = [request_2]
+        elif strategy == SearchStrategy.VECTOR:
+            reqs = [request_1]
         else:
             reqs = [request_1, request_2]
 
@@ -561,10 +577,42 @@ class KnowledgeService:
         for query_result_list in result:
             return_query_result_list = []    
             for single_result in query_result_list:
+                score = None
+                if isinstance(single_result, dict):
+                    score = single_result.get("score") or single_result.get("distance")
+                else:
+                    score = getattr(single_result, "score", None) or getattr(single_result, "distance", None)
+
+                single_file_id = None
+                if isinstance(single_result, dict):
+                    single_file_id = single_result.get("file_id")
+                else:
+                    try:
+                        single_file_id = single_result["file_id"]
+                    except Exception:
+                        single_file_id = None
+
+                if file_id and single_file_id != file_id:
+                    continue
+
+                file_name = None
+                text = None
+                if isinstance(single_result, dict):
+                    file_name = single_result.get("file_name")
+                    text = single_result.get("text")
+                else:
+                    try:
+                        file_name = single_result["file_name"]
+                        text = single_result["text"]
+                    except Exception:
+                        file_name = getattr(single_result, "file_name", None)
+                        text = getattr(single_result, "text", None)
+
                 return_query_result_list.append({
-                    "file_id": single_result["file_id"],
-                    "file_name": single_result["file_name"],
-                    "text": single_result["text"],
+                    "file_id": single_file_id,
+                    "file_name": file_name,
+                    "text": text,
+                    "score": score,
                 })
             return_result.append(return_query_result_list)
 
@@ -586,7 +634,7 @@ class KnowledgeService:
             })
         return data
     
-    async def create_category(self, name: str, description: str, db: AsyncSession):
+    async def create_category(self, user_id: str, name: str, description: str | None, db: AsyncSession):
         """
         创建知识库类别
         :param name: 类别名称
@@ -594,12 +642,14 @@ class KnowledgeService:
         :return: KnowledgeCategory
         """
         # 检查类别名称是否已存在
-        result = await db.execute(select(KnowledgeCategory).where(KnowledgeCategory.name == name))
+        result = await db.execute(
+            select(KnowledgeCategory).where(KnowledgeCategory.user_id == user_id, KnowledgeCategory.name == name)
+        )
         if result.scalars().first():
             raise ValueError(f"Category with name '{name}' already exists")
 
         new_category = KnowledgeCategory(
-            id=str(uuid.uuid4()),
+            user_id=user_id,
             name=name,
             description=description
         )
@@ -608,14 +658,51 @@ class KnowledgeService:
         await db.refresh(new_category)
         return new_category
 
-    async def get_all_categories(self, db: AsyncSession):
+    async def get_all_categories(self, user_id:str,db: AsyncSession):
         """
         获取所有知识库类别
         :return: List[KnowledgeCategory]
         """
-        result = await db.execute(select(KnowledgeCategory))
-        categories = result.scalars().all()
-        return categories
+        result = await db.execute(
+            select(KnowledgeCategory, func.count(KnowledgeFile.id))
+            .outerjoin(KnowledgeFile, KnowledgeFile.category_id == cast(KnowledgeCategory.id, SAString))
+            .where(KnowledgeCategory.user_id == user_id)
+            .group_by(KnowledgeCategory.id)
+        )
+        return result.all()
+
+    async def delete_category(self, user_id: str, category_id: str, db: AsyncSession) -> bool:
+        category_id_int = None
+        try:
+            category_id_int = int(category_id)
+        except Exception:
+            category_id_int = None
+
+        category_result = await db.execute(
+            select(KnowledgeCategory).where(
+                (KnowledgeCategory.id == category_id_int) if category_id_int is not None else (cast(KnowledgeCategory.id, SAString) == category_id),
+                KnowledgeCategory.user_id == user_id,
+            )
+        )
+        category = category_result.scalars().first()
+        if not category:
+            return False
+
+        file_result = await db.execute(
+            select(KnowledgeFile.id).where(KnowledgeFile.user_id == user_id, KnowledgeFile.category_id == category_id)
+        )
+        file_ids = [row[0] for row in file_result.all()]
+        for fid in file_ids:
+            await self.delete_file(user_id, category_id, fid, db=db)
+
+        await db.execute(
+            delete(KnowledgeCategory).where(
+                (KnowledgeCategory.id == category_id_int) if category_id_int is not None else (cast(KnowledgeCategory.id, SAString) == category_id),
+                KnowledgeCategory.user_id == user_id,
+            )
+        )
+        await db.commit()
+        return True
 
     async def get_files_by_category(self, user_id: str, category_id: str, db: AsyncSession):
         """
@@ -626,7 +713,10 @@ class KnowledgeService:
         """
         result = await db.execute(
             select(KnowledgeFile)
-            .where(KnowledgeFile.user_id == user_id, KnowledgeFile.category_id == category_id)
+            .where(
+                KnowledgeFile.user_id == user_id,
+                cast(KnowledgeFile.category_id, SAString) == str(category_id),
+            )
         )
         files = result.scalars().all()
         return files
@@ -638,18 +728,12 @@ class KnowledgeService:
         :return: str
         """
         # 获取所有类别
-        categories = await self.get_all_categories(db)
+        categories_with_counts = await self.get_all_categories(user_id, db)
         
         summary = "当前知识库包含以下类别：\n"
-        for category in categories:
+        for category, count in categories_with_counts:
             summary += f"- {category.name}: {category.description}\n"
-            # 获取该类别下的文件数量
-            result = await db.execute(
-                select(func.count(KnowledgeFile.id))
-                .where(KnowledgeFile.user_id == user_id, KnowledgeFile.category_id == category.id)
-            )
-            file_count = result.scalar()
-            summary += f"  包含文件数量: {file_count}\n"
+            summary += f"  包含文件数量: {count}\n"
             
         return summary
         

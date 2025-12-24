@@ -11,7 +11,7 @@ from config.loguru_config import get_logger, setup_logging
 from config.loader import get_config
 from services.http_client import shutdown_http_client
 # 直接导入路由模块
-from routes import auth, sessions, system
+from routes import auth, sessions, system,knowledge
 from db.database import db_startup,db_shutdown
 from work_flow.process import get_redis_checkpointer
 
@@ -50,8 +50,8 @@ async def app_lifespan(app:FastAPI):
     await cleanup(app)
 # 创建FastAPI应用
 app = FastAPI(
-    title="SmartAgent API",
-    description="智能代理系统后端API接口",
+    title="DeepSearchAgent API",
+    description="深度搜索系统后端API接口",
     version="1.0.0",
     lifespan=app_lifespan
 )
@@ -69,12 +69,13 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
+app.include_router(knowledge.router, prefix="/api")
 
 @app.get("/")
 async def root():
     """根路径，返回API基本信息"""
     return {
-        "message": "SmartAgent API 服务运行中",
+        "message": "DeepSearchAgent API 服务运行中",
         "version": "1.0.0",
         "docs": "/docs",
         "openapi": "/openapi.json"

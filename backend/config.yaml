@@ -103,7 +103,7 @@ tavily_api_key: "${TAVILY_API_KEY}"
 storage:
   storage_type: "fs"
   scheme: "fs"
-  file_path: "./data" 
+  file_path: "${STORAGE_FILE_PATH}"
 
 milvus:
   uri: "${MILVUS_URI:http://localhost:19530}"

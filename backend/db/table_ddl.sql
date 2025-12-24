@@ -244,7 +244,7 @@ create index if not exists ix_knowledge_chunks_file_id
 
 create table if not exists knowledge_category
 (
-    id          bigint                  not null primary key,
+     id INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id     varchar                  not null,
     name   varchar                  not null,
     description text null,

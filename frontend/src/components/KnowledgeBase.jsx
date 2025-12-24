@@ -10,6 +10,7 @@ import {
   CheckCircleOutlined, CloseCircleOutlined, ClockCircleOutlined, LoadingOutlined,
   FilePdfOutlined, FileWordOutlined, FileUnknownOutlined
 } from '@ant-design/icons';
+import api from '../api';
 
 const { Title, Text, Paragraph } = Typography;
 const { Search } = Input;
@@ -18,146 +19,65 @@ const { Option } = Select;
 
 // --- 枚举定义 ---
 const ParseStatus = {
-  WAITING: 'waiting',     // 等待解析中
-  PARSING: 'parsing',     // 解析中
-  SUCCESS: 'success',     // 解析成功
-  FAILURE: 'failure'      // 解析失败
+  PENDING: 'pending',
+  PROCESSING: 'processing',
+  COMPLETED: 'completed',
+  FAILED: 'failed'
 };
 
 const RetrievalStrategy = {
-  HYBRID: 'hybrid',       // 混合检索
-  FULLTEXT: 'fulltext',   // 全文检索
-  VECTOR: 'vector'        // 向量检索
+  HYBRID: 'hybrid',
+  FULL_TEXT: 'full_text',
+  VECTOR: 'vector'
 };
 
-// --- Mock 数据与服务层 (后续替换为真实 API 调用) ---
-// 注意：在真实对接时，只需替换这一层的实现即可
-const MockService = {
-  // 模拟延迟
-  delay: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
-
-  // 获取分类列表
+const KnowledgeApi = {
   getCategories: async () => {
-    await MockService.delay(500);
-    return [
-      { id: '1', name: '产品文档', count: 3, description: '包含所有产品的详细规格说明书、用户手册及版本更新记录。' },
-      { id: '2', name: '技术规范', count: 2, description: '系统架构设计、API 接口文档、数据库设计规范等技术资料。' },
-      { id: '3', name: '运营资料', count: 0, description: '市场推广方案、运营活动策划案及相关数据报表。' },
-    ];
+    const response = await api.get('/knowledge/categories');
+    const data = response.data.data || [];
+    return data.map((c) => ({ ...c, id: String(c.id) }));
   },
-
-  // 创建分类
   createCategory: async (name, description) => {
-    await MockService.delay(500);
-    return { id: Date.now().toString(), name, description, count: 0 };
+    const response = await api.post('/knowledge/category', { name, description });
+    return { ...response.data, id: String(response.data.id) };
   },
-
-  // 删除分类
-  deleteCategory: async (_categoryId) => {
-    await MockService.delay(500);
+  deleteCategory: async (categoryId) => {
+    await api.delete(`/knowledge/category/${categoryId}`);
     return true;
   },
-
-  // 获取分类下的文件
   getFiles: async (categoryId) => {
-    await MockService.delay(600);
-    // 简单模拟不同分类下的文件
-    if (categoryId === '1') {
-      return [
-        {
-          id: 1,
-          filename: '产品手册_v1.0.pdf',
-          uploadTime: Date.now() - 3600000,
-          parseStatus: ParseStatus.SUCCESS,
-          parseTime: Date.now() - 3000000,
-          chunkCount: 15,
-        },
-        {
-          id: 2,
-          filename: '竞品分析.docx',
-          uploadTime: Date.now() - 7200000,
-          parseStatus: ParseStatus.WAITING,
-          parseTime: null,
-          chunkCount: 0,
-        }
-      ];
-    }
-    return [];
+    const response = await api.get(`/knowledge/category/${categoryId}/files`);
+    return response.data.data || [];
   },
-
-  // 上传文件
   uploadFile: async (categoryId, file) => {
-    await MockService.delay(1000);
-    return {
-      id: Date.now(),
-      filename: file.name,
-      uploadTime: Date.now(),
-      parseStatus: ParseStatus.WAITING,
-      parseTime: null,
-      chunkCount: 0,
-    };
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('category_id', categoryId);
+    const response = await api.post('/knowledge/upload', formData);
+    return response.data.data;
   },
-
-  // 开始解析
-  startParse: async (_fileId) => {
-    await MockService.delay(500); // 模拟请求启动
+  startParse: async (categoryId, fileId) => {
+    const response = await api.post('/knowledge/parse/submit', null, {
+      params: { file_id: fileId, category_id: categoryId }
+    });
+    return response.data.data;
+  },
+  checkParseStatus: async (fileId) => {
+    const response = await api.get(`/knowledge/parse/progress/${fileId}`);
+    return response.data.data;
+  },
+  testRecall: async (query, strategy, fileId, limit = 3) => {
+    const response = await api.post('/knowledge/recall/test', {
+      query,
+      limit,
+      search_strategy: strategy,
+      file_id: fileId
+    });
+    return response.data.data || [];
+  },
+  deleteFile: async (categoryId, fileId) => {
+    await api.delete(`/knowledge/${fileId}`, { params: { category_id: categoryId } });
     return true;
-  },
-
-  // 轮询/获取解析状态 (模拟解析过程)
-  checkParseStatus: async (_fileId) => {
-    await MockService.delay(2000); // 模拟解析耗时
-    // 模拟 90% 成功率
-    const isSuccess = Math.random() > 0.1;
-    return {
-      status: isSuccess ? ParseStatus.SUCCESS : ParseStatus.FAILURE,
-      chunkCount: isSuccess ? Math.floor(Math.random() * 50) + 1 : 0,
-      parseTime: Date.now()
-    };
-  },
-
-  // 召回测试
-  testRecall: async (query, strategy, _fileId, limit = 3) => {
-    await MockService.delay(800);
-    // 模拟返回结果
-    if (query.includes('空')) return [];
-    
-    // 根据 limit 生成模拟数据
-    return Array.from({ length: limit }).map((_, index) => ({
-      file_name: '测试文档.pdf',
-      score: 0.95 - (index * 0.1), // 模拟分数递减
-      content: `[Chunk ${index + 1}] 这是根据策略 [${strategy}] 召回的关于 "${query}" 的第 ${index + 1} 条相关内容片段... 这里包含了详细的上下文信息。`,
-    }));
-  },
-  
-  // 获取所有文件（用于级联选择）
-  getAllFilesForSelect: async () => {
-    await MockService.delay(300);
-    // 模拟数据结构：分类 -> 文件
-    return [
-      {
-        value: '1',
-        label: '产品文档',
-        children: [
-          { value: 1, label: '产品手册_v1.0.pdf' },
-          { value: 2, label: '竞品分析.docx' }
-        ]
-      },
-      {
-        value: '2',
-        label: '技术规范',
-        children: [
-          { value: 3, label: 'API接口文档.md' },
-          { value: 4, label: '数据库设计.sql' }
-        ]
-      },
-      {
-        value: '3',
-        label: '运营资料',
-        isLeaf: true, // 无子节点
-        disabled: true // 禁用
-      }
-    ];
   }
 };
 
@@ -221,10 +141,10 @@ const KnowledgeBase = () => {
 
   const loadCategories = async () => {
     try {
-      const data = await MockService.getCategories();
+      const data = await KnowledgeApi.getCategories();
       setCategories(data);
       if (data.length > 0 && !selectedCategoryId) {
-        setSelectedCategoryId(data[0].id);
+        setSelectedCategoryId(String(data[0].id));
       }
     } catch {
       message.error('加载分类失败');
@@ -234,7 +154,7 @@ const KnowledgeBase = () => {
   const loadFiles = async (categoryId) => {
     setLoadingFiles(true);
     try {
-      const data = await MockService.getFiles(categoryId);
+      const data = await KnowledgeApi.getFiles(categoryId);
       setFiles(data);
     } catch {
       message.error('加载文件失败');
@@ -245,10 +165,21 @@ const KnowledgeBase = () => {
 
   const loadFileOptions = async () => {
     try {
-      const options = await MockService.getAllFilesForSelect();
+      const categoryList = await KnowledgeApi.getCategories();
+      const fileLists = await Promise.all(
+        (categoryList || []).map(async (c) => {
+          const fs = await KnowledgeApi.getFiles(c.id);
+          return { category: c, files: fs || [] };
+        })
+      );
+      const options = fileLists.map(({ category, files: fs }) => ({
+        value: category.id,
+        label: category.name,
+        children: fs.map((f) => ({ value: f.file_id, label: f.file_name }))
+      }));
       setFileOptions(options);
-    } catch (error) {
-      console.error('加载文件选项失败', error);
+    } catch {
+      setFileOptions([]);
     }
   };
 
@@ -259,14 +190,14 @@ const KnowledgeBase = () => {
     }
     setCreatingCategory(true);
     try {
-      const newCategory = await MockService.createCategory(newCategoryName, newCategoryDesc);
+      const newCategory = await KnowledgeApi.createCategory(newCategoryName, newCategoryDesc);
       setCategories([...categories, newCategory]);
       message.success('分类创建成功');
       setIsCategoryModalVisible(false);
       setNewCategoryName('');
       setNewCategoryDesc('');
       // 自动选中新分类
-      setSelectedCategoryId(newCategory.id);
+      setSelectedCategoryId(String(newCategory.id));
     } catch {
       message.error('创建失败');
     } finally {
@@ -277,7 +208,7 @@ const KnowledgeBase = () => {
   const handleDeleteCategory = () => {
     if (!selectedCategoryId) return;
     
-    const category = categories.find(c => c.id === selectedCategoryId);
+    const category = categories.find(c => String(c.id) === String(selectedCategoryId));
     
     Modal.confirm({
       title: '确认删除知识库分类?',
@@ -293,15 +224,16 @@ const KnowledgeBase = () => {
       cancelText: '取消',
       onOk: async () => {
         try {
-          await MockService.deleteCategory(selectedCategoryId);
-          const newCategories = categories.filter(c => c.id !== selectedCategoryId);
+          await KnowledgeApi.deleteCategory(selectedCategoryId);
+          const newCategories = categories.filter(c => String(c.id) !== String(selectedCategoryId));
           setCategories(newCategories);
           
           if (newCategories.length > 0) {
-            setSelectedCategoryId(newCategories[0].id);
+            setSelectedCategoryId(String(newCategories[0].id));
           } else {
             setSelectedCategoryId(null);
           }
+          setFiles([]);
           message.success('分类已删除');
         } catch {
           message.error('删除失败');
@@ -320,18 +252,19 @@ const KnowledgeBase = () => {
     setUploading(true);
     try {
       // 1. 上传文件
-      const newFile = await MockService.uploadFile(selectedCategoryId, file);
+      const newFile = await KnowledgeApi.uploadFile(selectedCategoryId, file);
       const updatedFiles = [newFile, ...files];
       setFiles(updatedFiles);
       message.success('文件上传成功');
+      setCategories(prev => prev.map(c => String(c.id) === String(selectedCategoryId) ? { ...c, count: (c.count || 0) + 1 } : c));
 
       // 2. 询问是否解析
       Modal.confirm({
         title: '是否立即解析?',
-        content: `文件 "${newFile.filename}" 已上传，是否立即开始解析？`,
+        content: `文件 "${newFile.file_name}" 已上传，是否立即开始解析？`,
         okText: '立即解析',
         cancelText: '稍后',
-        onOk: () => handleParse(newFile.id),
+        onOk: () => handleParse(newFile.file_id),
       });
 
     } catch {
@@ -344,43 +277,74 @@ const KnowledgeBase = () => {
 
   // 解析流程
   const handleParse = async (fileId) => {
-    // 1. 更新状态为"解析中"
-    updateFileStatus(fileId, { parseStatus: ParseStatus.PARSING });
-    
+    updateFileStatus(fileId, { parse_status: ParseStatus.PROCESSING });
     try {
-      // 2. 触发解析任务
-      await MockService.startParse(fileId);
-      
-      // 3. 模拟异步解析过程 (真实场景可能是轮询或 WebSocket)
-      // 这里我们在前端模拟一个延迟后获取结果
-      setTimeout(async () => {
+      await KnowledgeApi.startParse(selectedCategoryId, fileId);
+      const poll = async () => {
         try {
-          const result = await MockService.checkParseStatus(fileId);
-          updateFileStatus(fileId, {
-            parseStatus: result.status,
-            chunkCount: result.chunkCount,
-            parseTime: result.parseTime
-          });
-          if (result.status === ParseStatus.SUCCESS) {
-            message.success('解析完成');
-          } else {
-            message.error('解析失败');
+          const result = await KnowledgeApi.checkParseStatus(fileId);
+          if (!result) {
+            updateFileStatus(fileId, { parse_status: ParseStatus.FAILED });
+            return;
           }
+          updateFileStatus(fileId, {
+            parse_status: result.status,
+            chunk_num: result.chunk_num ?? undefined,
+            updated_at: result.updated_at ?? undefined
+          });
+          if (result.status === ParseStatus.COMPLETED) {
+            message.success('解析完成');
+            await loadFiles(selectedCategoryId);
+            return;
+          }
+          if (result.status === ParseStatus.FAILED) {
+            message.error('解析失败');
+            return;
+          }
+          setTimeout(poll, 2000);
         } catch {
-          updateFileStatus(fileId, { parseStatus: ParseStatus.FAILURE });
+          updateFileStatus(fileId, { parse_status: ParseStatus.FAILED });
         }
-      }, 3000);
-
+      };
+      setTimeout(poll, 1500);
     } catch {
       message.error('启动解析失败');
-      updateFileStatus(fileId, { parseStatus: ParseStatus.FAILURE });
+      updateFileStatus(fileId, { parse_status: ParseStatus.FAILED });
     }
   };
 
   const updateFileStatus = (fileId, updates) => {
     setFiles(prevFiles => prevFiles.map(f => 
-      f.id === fileId ? { ...f, ...updates } : f
+      f.file_id === fileId ? { ...f, ...updates } : f
     ));
+  };
+
+  const handleDeleteFile = (fileId) => {
+    if (!selectedCategoryId) return;
+    const file = files.find(f => f.file_id === fileId);
+    Modal.confirm({
+      title: '确认删除文件?',
+      icon: <DeleteOutlined style={{ color: 'red' }} />,
+      content: (
+        <div>
+          <p>您正在删除文件：<Text strong>{file?.file_name}</Text></p>
+          <p style={{ color: '#ff4d4f' }}>注意：此操作不可恢复。</p>
+        </div>
+      ),
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await KnowledgeApi.deleteFile(selectedCategoryId, fileId);
+          setFiles(prev => prev.filter(f => f.file_id !== fileId));
+          setCategories(prev => prev.map(c => String(c.id) === String(selectedCategoryId) ? { ...c, count: Math.max((c.count || 0) - 1, 0) } : c));
+          message.success('文件已删除');
+        } catch {
+          message.error('删除失败');
+        }
+      }
+    });
   };
 
   const handleTestSearch = async () => {
@@ -393,7 +357,7 @@ const KnowledgeBase = () => {
     setIsTesting(true);
     try {
       const fileId = selectedTestDoc[1]; // 选中的是第二级(文件ID)
-      const results = await MockService.testRecall(testQuery, testStrategy, fileId, testLimit);
+      const results = await KnowledgeApi.testRecall(testQuery, testStrategy, fileId, testLimit);
       setTestResults(results);
       if (results.length === 0) {
         message.info('未找到相关内容');
@@ -409,13 +373,13 @@ const KnowledgeBase = () => {
 
   const getStatusTag = (status) => {
     switch (status) {
-      case ParseStatus.WAITING:
+      case ParseStatus.PENDING:
         return <Tag icon={<ClockCircleOutlined />} color="default">等待解析</Tag>;
-      case ParseStatus.PARSING:
+      case ParseStatus.PROCESSING:
         return <Tag icon={<SyncOutlined spin />} color="processing">解析中</Tag>;
-      case ParseStatus.SUCCESS:
+      case ParseStatus.COMPLETED:
         return <Tag icon={<CheckCircleOutlined />} color="success">解析成功</Tag>;
-      case ParseStatus.FAILURE:
+      case ParseStatus.FAILED:
         return <Tag icon={<CloseCircleOutlined />} color="error">解析失败</Tag>;
       default:
         return <Tag>未知状态</Tag>;
@@ -425,26 +389,26 @@ const KnowledgeBase = () => {
   const columns = [
     {
       title: '文件名',
-      dataIndex: 'filename',
-      key: 'filename',
+      dataIndex: 'file_name',
+      key: 'file_name',
       render: (text) => <Space><FileTextOutlined />{text}</Space>
     },
     {
       title: '上传时间',
-      dataIndex: 'uploadTime',
-      key: 'uploadTime',
-      render: (timestamp) => new Date(timestamp).toLocaleString()
+      dataIndex: 'created_at',
+      key: 'created_at',
+      render: (timestamp) => timestamp ? new Date(timestamp).toLocaleString() : '-'
     },
     {
       title: '解析状态',
-      dataIndex: 'parseStatus',
-      key: 'parseStatus',
+      dataIndex: 'parse_status',
+      key: 'parse_status',
       render: (status) => getStatusTag(status)
     },
     {
       title: 'Chunk数量',
-      dataIndex: 'chunkCount',
-      key: 'chunkCount',
+      dataIndex: 'chunk_num',
+      key: 'chunk_num',
       align: 'center',
     },
     {
@@ -455,12 +419,12 @@ const KnowledgeBase = () => {
           <Button 
             type="link" 
             size="small"
-            disabled={record.parseStatus === ParseStatus.PARSING || record.parseStatus === ParseStatus.SUCCESS}
-            onClick={() => handleParse(record.id)}
+            disabled={record.parse_status === ParseStatus.PROCESSING}
+            onClick={() => handleParse(record.file_id)}
           >
-            {record.parseStatus === ParseStatus.SUCCESS ? '重新解析' : '解析'}
+            {record.parse_status === ParseStatus.COMPLETED ? '重新解析' : '解析'}
           </Button>
-          <Button type="link" danger size="small">删除</Button>
+          <Button type="link" danger size="small" onClick={() => handleDeleteFile(record.file_id)}>删除</Button>
         </Space>
       )
     }
@@ -510,12 +474,12 @@ const KnowledgeBase = () => {
                   style={{ width: '100%' }}
                 >
                   <Radio.Button value={RetrievalStrategy.HYBRID} style={{ width: '33%', textAlign: 'center' }}>混合检索</Radio.Button>
-                  <Radio.Button value={RetrievalStrategy.FULLTEXT} style={{ width: '33%', textAlign: 'center' }}>全文检索</Radio.Button>
+                  <Radio.Button value={RetrievalStrategy.FULL_TEXT} style={{ width: '33%', textAlign: 'center' }}>全文检索</Radio.Button>
                   <Radio.Button value={RetrievalStrategy.VECTOR} style={{ width: '33%', textAlign: 'center' }}>向量检索</Radio.Button>
                 </Radio.Group>
                 <div style={{ marginTop: 8, color: '#888', fontSize: '12px' }}>
                   {testStrategy === RetrievalStrategy.HYBRID && '同时使用关键词匹配和向量语义匹配，结果最全面'}
-                  {testStrategy === RetrievalStrategy.FULLTEXT && '仅使用关键词匹配，适合精确查找'}
+                  {testStrategy === RetrievalStrategy.FULL_TEXT && '仅使用关键词匹配，适合精确查找'}
                   {testStrategy === RetrievalStrategy.VECTOR && '仅使用向量语义匹配，适合模糊查找'}
                 </div>
               </Form.Item>
@@ -567,8 +531,8 @@ const KnowledgeBase = () => {
                     <div style={{ width: '100%' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                         <Text strong style={{ color: '#1890ff' }}>{item.file_name}</Text>
-                        <Tag color={item.score > 0.7 ? 'green' : item.score > 0.4 ? 'orange' : 'red'}>
-                          相似度: {(item.score * 100).toFixed(2)}%
+                        <Tag color={(typeof item.score === 'number' ? item.score : 0) > 0.7 ? 'green' : (typeof item.score === 'number' ? item.score : 0) > 0.4 ? 'orange' : 'red'}>
+                          相似度: {(((typeof item.score === 'number' ? item.score : 0)) * 100).toFixed(2)}%
                         </Tag>
                       </div>
                       <div style={{ 
@@ -675,7 +639,7 @@ const KnowledgeBase = () => {
               <Table 
                 columns={columns} 
                 dataSource={files} 
-                rowKey="id" 
+                rowKey="file_id" 
                 loading={loadingFiles}
                 pagination={false}
               />
